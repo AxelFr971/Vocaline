@@ -2,7 +2,6 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "NIXPACKS"
-    // No global buildCommand here. Builds are now fully managed within each service.
   },
   "deploy": {
     "numReplicas": 1,
