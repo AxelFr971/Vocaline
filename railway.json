@@ -12,15 +12,6 @@
   "environment": {
     "PORT": "8080",
     "NODE_ENV": "production"
-    # IMPORTANT: Ajoutez vos variables d'environnement Xirsys ici
-    # Elles sont sécurisées sur Railway.
-    # Assurez-vous que XIRSYS_SECRET_ID et XIRSYS_SECRET_TOKEN sont ici
-    # Et mettez une variable pour l'URL du backend pour le frontend
-    # EXEMPLE (vous devez les créer dans les variables d'environnement Railway aussi) :
-    # "XIRSYS_SECRET_ID": "aloche",
-    # "XIRSYS_SECRET_TOKEN": "f324b37e-4650-11f0-af35-96dd14091898",
-    # "XIRSYS_BASE_URL": "global.xirsys.net",
-    # "BACKEND_WS_URL": "wss://YOUR_RAILWAY_APP_DOMAIN.railway.app"
   },
   "services": [
     {
