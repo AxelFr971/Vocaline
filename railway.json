@@ -2,6 +2,7 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "NIXPACKS"
+    // No global buildCommand here. Builds are now fully managed within each service.
   },
   "deploy": {
     "numReplicas": 1,
@@ -19,7 +20,7 @@
       "path": "vocaline-backend",
       "build": {
         "builder": "NIXPACKS",
-        "buildCommand": "npm install --production"
+        "buildCommand": "cp package.json /tmp/package.json && cp package-lock.json /tmp/package-lock.json && cd /tmp && npm install --omit=dev && cp -r node_modules /app/vocaline-backend/"
       },
       "deploy": {
         "startCommand": "node server.js",
@@ -32,7 +33,7 @@
       "path": "vocaline-frontend",
       "build": {
         "builder": "NIXPACKS",
-        "buildCommand": "npm install --production && npm run build"
+        "buildCommand": "npm install --omit=dev && npm run build"
       },
       "deploy": {
         "startCommand": "serve -s build",
