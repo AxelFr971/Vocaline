@@ -1,0 +1,18 @@
+{
+  "name": "vocaline-monorepo",
+  "version": "1.0.0",
+  "description": "Monorepo for Vocaline application (Backend and Frontend)",
+  "main": "index.js",
+  "scripts": {
+    "start:backend": "cd vocaline-backend && node server.js",
+    "start:frontend": "cd vocaline-frontend && npm start",
+    "build:frontend": "cd vocaline-frontend && npm install && npm run build",
+    "install:all": "npm install && cd vocaline-backend && npm install && cd ../vocaline-frontend && npm install",
+    "deploy:backend": "cd vocaline-backend && npm install --production",
+    "deploy:frontend": "cd vocaline-frontend && npm install --production && npm run build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {}
+}
