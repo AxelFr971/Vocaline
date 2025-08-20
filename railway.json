@@ -18,7 +18,8 @@
       "name": "vocaline-backend",
       "path": "vocaline-backend",
       "build": {
-        "builder": "NIXPACKS"
+        "builder": "NIXPACKS",
+        "buildCommand": "npm install --production"
       },
       "deploy": {
         "startCommand": "node server.js",
