@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
-// --- Xirsys Constants (PLACE YOUR ACTUAL CREDENTIALS HERE) ---
-// IMPORTANT: For production, these should ideally be loaded from environment variables
-// or a secure backend endpoint, not hardcoded directly in client-side code.
-// For development and testing, hardcoding is acceptable.
-const XIRSYS_SECRET_ID = 'aloche'; // e.g., 'your_account_name'
-const XIRSYS_SECRET_TOKEN = 'f324b37e-4650-11f0-af35-96dd14091898'; // The long secret token from Xirsys
-const XIRSYS_BASE_URL = 'global.xirsys.net'; // CORRECTED: Use base URL, not the full endpoint here
+// --- Xirsys Constants (NOW LOADED FROM ENVIRONMENT VARIABLES) ---
+// The actual values will be provided by Railway securely.
+const XIRSYS_SECRET_ID = process.env.REACT_APP_XIRSYS_SECRET_ID;
+const XIRSYS_SECRET_TOKEN = process.env.REACT_APP_XIRSYS_SECRET_TOKEN;
+const XIRSYS_BASE_URL = process.env.REACT_APP_XIRSYS_BASE_URL;
 // --- END Xirsys Constants ---
 
 function App() {
@@ -34,6 +32,7 @@ function App() {
   // --- Utility: Add message to logs ---
   const addMessageToLogs = (from, text) => {
     setMessages(prev => {
+      // Keep only the last 100 messages to prevent performance issues
       const newMessages = [...prev, { from, text }];
       return newMessages.slice(Math.max(newMessages.length - 100, 0));
     });
@@ -57,10 +56,16 @@ function App() {
 
   // --- WebSocket Connection & Message Handling ---
   useEffect(() => {
-    // !!! IMPORTANT: Replace 'VOTRE_IP_LOCALE' with your actual IPv4 address from ipconfig !!!
-    // Example for local testing: 'ws://192.168.1.10:8080'
-    // For Railway deployment, this will be your public backend URL (e.g., 'wss://your-backend-xxxx.railway.app')
-    ws.current = new WebSocket('ws://VOTRE_IP_LOCALE:8080'); 
+    // IMPORTANT: This URL is now read from a secure environment variable on Railway.
+    const backendWsUrl = process.env.REACT_APP_BACKEND_WS_URL || "ws://localhost:8080";
+
+    if (!backendWsUrl) {
+      console.error('REACT_APP_BACKEND_WS_URL is not set!');
+      addMessageToLogs('Error', 'Backend URL missing. Check Railway config.');
+      return; // Prevent WebSocket connection if URL is not set
+    }
+
+    ws.current = new WebSocket(backendWsUrl);
     
     ws.current.onopen = () => {
       console.log('WebSocket Connected!');
@@ -198,7 +203,7 @@ function App() {
   };
 
   // Function to initiate RTCPeerConnection
-  const initiatePeerConnection = async () => { // Made async to allow await on fetch
+  const initiatePeerConnection = async () => {
       if (peerConnection.current) {
           addMessageToLogs('WebRTC', 'Closing existing PeerConnection before initiating new one (from initiatePeerConnection).');
           peerConnection.current.close();
@@ -210,37 +215,40 @@ function App() {
 
       let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }]; // Default Google STUN server
 
-      // --- Fetch Xirsys ICE servers ---
-      try {
-          // Xirsys requires base64 encoded auth for some endpoints
-          const XIRSYS_AUTH_TOKEN = btoa(`${XIRSYS_SECRET_ID}:${XIRSYS_SECRET_TOKEN}`);
-          // Corrected Xirsys URL in fetch call to use XIRSYS_BASE_URL
-          const response = await fetch(`https://${XIRSYS_BASE_URL}/_turn/${XIRSYS_SECRET_ID}`, {
-              method: 'PUT',
-              headers: {
-                  'Authorization': `Basic ${XIRSYS_AUTH_TOKEN}`,
-                  'Content-Type': 'application/json',
-                  'Content-Length': 0 // Xirsys PUT requires this for some endpoints
-              }
-          });
+      // --- Fetch Xirsys ICE servers from environment variables ---
+      if (XIRSYS_SECRET_ID && XIRSYS_SECRET_TOKEN && XIRSYS_BASE_URL) {
+          try {
+              const XIRSYS_AUTH_TOKEN = btoa(`${XIRSYS_SECRET_ID}:${XIRSYS_SECRET_TOKEN}`);
+              const response = await fetch(`https://${XIRSYS_BASE_URL}/_turn/${XIRSYS_SECRET_ID}`, {
+                  method: 'PUT',
+                  headers: {
+                      'Authorization': `Basic ${XIRSYS_AUTH_TOKEN}`,
+                      'Content-Type': 'application/json',
+                      'Content-Length': 0 
+                  }
+              });
 
-          if (response.ok) {
-              const xirsysData = await response.json();
-              if (xirsysData.e === 'ok' && xirsysData.v && xirsysData.v.iceServers) {
-                  iceServers = xirsysData.v.iceServers;
-                  addMessageToLogs('Xirsys', 'Successfully fetched Xirsys ICE servers.');
-                  console.log('Xirsys ICE Servers:', iceServers);
+              if (response.ok) {
+                  const xirsysData = await response.json();
+                  if (xirsysData.e === 'ok' && xirsysData.v && xirsysData.v.iceServers) {
+                      iceServers = xirsysData.v.iceServers;
+                      addMessageToLogs('Xirsys', 'Successfully fetched Xirsys ICE servers.');
+                      console.log('Xirsys ICE Servers:', iceServers);
+                  } else {
+                      console.error('Xirsys API error:', xirsysData);
+                      addMessageToLogs('Xirsys Error', `Failed to fetch Xirsys ICE servers: ${xirsysData.e || 'Unknown error'}. Falling back to default STUN.`);
+                  }
               } else {
-                  console.error('Xirsys API error:', xirsysData);
-                  addMessageToLogs('Xirsys Error', `Failed to fetch Xirsys ICE servers: ${xirsysData.e || 'Unknown error'}. Falling back to default STUN.`);
+                  console.error('Failed to fetch Xirsys ICE servers, HTTP status:', response.status);
+                  addMessageToLogs('Xirsys Error', `Failed to fetch Xirsys ICE servers (HTTP ${response.status}). Falling back to default STUN.`);
               }
-          } else {
-              console.error('Failed to fetch Xirsys ICE servers, HTTP status:', response.status);
-              addMessageToLogs('Xirsys Error', `Failed to fetch Xirsys ICE servers (HTTP ${response.status}). Falling back to default STUN.`);
+          } catch (error) {
+              console.error('Error fetching Xirsys ICE servers:', error);
+              addMessageToLogs('Xirsys Error', `Exception fetching Xirsys ICE servers: ${error.message}. Falling back to default STUN.`);
           }
-      } catch (error) {
-          console.error('Error fetching Xirsys ICE servers:', error);
-          addMessageToLogs('Xirsys Error', `Exception fetching Xirsys ICE servers: ${error.message}. Falling back to default STUN.`);
+      } else {
+          addMessageToLogs('Xirsys Warning', 'Xirsys credentials not provided. Using default STUN server.');
+          console.warn('Xirsys credentials (REACT_APP_XIRSYS_SECRET_ID, REACT_APP_XIRSYS_SECRET_TOKEN, REACT_APP_XIRSYS_BASE_URL) are not set. Using default STUN server.');
       }
       // --- End Fetch Xirsys ICE servers ---
 
@@ -284,7 +292,7 @@ function App() {
       peerConnection.current.oniceconnectionstatechange = () => {
           console.log(`ICE connection state changed: ${peerConnection.current.iceConnectionState}`);
           addMessageToLogs('WebRTC', `ICE state: ${peerConnection.current.iceConnectionState}`);
-          if (peerConnection.current.iceConnectionState === 'failed' || peerConnection.current.iceConnectionState === 'disconnected') {
+          if (peerConnection.current.iceConnectionstate === 'failed' || peerConnection.current.iceConnectionState === 'disconnected') {
               addMessageToLogs('WebRTC Error', 'WebRTC connection failed or disconnected. Prompting change partner.');
           }
       };
@@ -364,19 +372,19 @@ function App() {
       try {
           await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
           addMessageToLogs('WebRTC', 'Added ICE candidate.');
-      } catch (e) {
+      }
+      catch (e) {
           console.error('Error adding ICE candidate:', e);
-          addMessageToLogs('Error', 'WebRTC: Error adding ICE candidate.');
+          addMessageToLogs('Error', `WebRTC: Error adding ICE candidate: ${e.message}.`);
       }
   };
 
   const handleJoinMatchmaking = async () => {
-    // Check if localStream is available *before* enabling the button
     if (!localStream.current) {
         addMessageToLogs('Error', 'Microphone access required to join matchmaking.');
         alert('Please allow microphone access to join Vocaline.');
         await requestMicrophoneAccess();
-        if (!localStream.current) { // Check again after attempting to acquire
+        if (!localStream.current) {
             addMessageToLogs('Error', 'Microphone access still not granted. Cannot join.');
             return;
         }
@@ -488,7 +496,7 @@ function App() {
         </div>
         <button
           onClick={handleJoinMatchmaking}
-          disabled={isJoinButtonDisabled} // Use the consolidated disabled state variable
+          disabled={isJoinButtonDisabled}
         >
           Rejoindre le matchmaking
         </button>
