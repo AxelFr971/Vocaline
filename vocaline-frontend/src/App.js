@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 // --- Xirsys Constants (NOW LOADED FROM ENVIRONMENT VARIABLES) ---
-// The actual values will be provided by Railway securely.
 const XIRSYS_SECRET_ID = process.env.REACT_APP_XIRSYS_SECRET_ID;
 const XIRSYS_SECRET_TOKEN = process.env.REACT_APP_XIRSYS_SECRET_TOKEN;
 const XIRSYS_BASE_URL = process.env.REACT_APP_XIRSYS_BASE_URL;
@@ -26,13 +25,12 @@ function App() {
   // --- WebRTC State ---
   const localAudioRef = useRef(null);
   const remoteAudioRef = useRef(null);
-  const localStream = useRef(null); // Will hold the MediaStream object
+  const localStream = useRef(null);
   const peerConnection = useRef(null);
 
   // --- Utility: Add message to logs ---
   const addMessageToLogs = (from, text) => {
     setMessages(prev => {
-      // Keep only the last 100 messages to prevent performance issues
       const newMessages = [...prev, { from, text }];
       return newMessages.slice(Math.max(newMessages.length - 100, 0));
     });
@@ -56,17 +54,15 @@ function App() {
 
   // --- WebSocket Connection & Message Handling ---
   useEffect(() => {
-    // IMPORTANT: This URL is now read from a secure environment variable on Railway.
-    //const backendWsUrl = process.env.REACT_APP_BACKEND_WS_URL || "ws://localhost:8080";
-	const PORT = process.env.PORT || 8080;
-	const wss = new WebSocket.Server({ port: PORT });
-	const backendWsUrl = "wss://vocaline-production.up.railway.app/";
-	
+    // --- Ligne de connexion optimisée pour la flexibilité ---
+    // En production, Railway fournit REACT_APP_BACKEND_WS_URL.
+    // En développement, on utilise 'ws://localhost:8080' par défaut.
+    const backendWsUrl = process.env.REACT_APP_BACKEND_WS_URL || "ws://localhost:8080";
 
     if (!backendWsUrl) {
-      console.error('REACT_APP_BACKEND_WS_URL is not set!');
+      console.error('Backend WS URL is not set!');
       addMessageToLogs('Error', 'Backend URL missing. Check Railway config.');
-      return; // Prevent WebSocket connection if URL is not set
+      return;
     }
 
     ws.current = new WebSocket(backendWsUrl);
@@ -75,8 +71,8 @@ function App() {
       console.log('WebSocket Connected!');
       setIsConnected(true);
       setCurrentStatus('connected');
-      addMessageToLogs('System', 'Connected to Vocaline server.');
-      if (!localStream.current) { 
+      addMessageToLogs('System', `Connected to Vocaline server at ${backendWsUrl}.`);
+      if (!localStream.current) {
         requestMicrophoneAccess();
       }
     };
@@ -92,7 +88,7 @@ function App() {
       }
       
       console.log('Message from server:', messageData);
-      addMessageToLogs('Server RX', JSON.stringify(messageData)); 
+      addMessageToLogs('Server RX', JSON.stringify(messageData));
 
       switch (messageData.type) {
         case 'welcome':
@@ -103,29 +99,29 @@ function App() {
           addMessageToLogs('System', `Status updated: ${messageData.payload.status}`);
           if (messageData.payload.status === 'waiting_for_match' || messageData.payload.status === 'disconnected') {
             setPartnerUsername(null);
-            cleanupWebRTC(); 
+            cleanupWebRTC();
           }
           break;
         case 'stats_update':
           console.log('Frontend: Receiving stats_update:', messageData.payload);
           setRealtimeStats(messageData.payload);
-          console.log('Frontend: realtimeStats state updated to:', messageData.payload); 
-          break; 
+          console.log('Frontend: realtimeStats state updated to:', messageData.payload);
+          break;
         case 'match_found':
           setPartnerUsername(messageData.payload.partnerUsername);
           setCurrentStatus('in-call');
           addMessageToLogs('System', `Match found with ${messageData.payload.partnerUsername}!`);
-          cleanupWebRTC(); 
-          initiatePeerConnection(); 
-          if (messageData.payload.initiateCall) { 
-              createOffer(); 
+          cleanupWebRTC();
+          initiatePeerConnection();
+          if (messageData.payload.initiateCall) {
+              createOffer();
           }
           break;
         case 'partner_disconnected':
           setPartnerUsername(null);
-          setCurrentStatus('waiting_for_match'); 
+          setCurrentStatus('waiting_for_match');
           addMessageToLogs('System', `Your partner (${messageData.payload.message.split(' has ')[0]}) has disconnected. Searching for new partner...`);
-          cleanupWebRTC(); 
+          cleanupWebRTC();
           break;
         case 'error':
           addMessageToLogs('Error', messageData.payload.message);
@@ -145,11 +141,11 @@ function App() {
           addMessageToLogs('WebRTC RX', 'ICE Candidate received.');
           handleCandidate(messageData.payload.candidate);
           break;
-        case 'partner_mute_status': 
+        case 'partner_mute_status':
           addMessageToLogs('Partner Status', `${messageData.payload.username} is now ${messageData.payload.isMuted ? 'muted' : 'unmuted'}.`);
           break;
         default:
-          addMessageToLogs('Server', event.data); 
+          addMessageToLogs('Server', event.data);
           break;
       }
     };
@@ -160,7 +156,7 @@ function App() {
       setCurrentStatus('disconnected');
       addMessageToLogs('System', 'Disconnected from server.');
       setPartnerUsername(null);
-      cleanupWebRTC(); 
+      cleanupWebRTC();
       if (localStream.current) {
         localStream.current.getTracks().forEach(track => track.stop());
         localStream.current = null;
@@ -177,19 +173,16 @@ function App() {
       if (ws.current && ws.current.readyState === WebSocket.OPEN) {
         ws.current.close();
       }
-      cleanupWebRTC(); 
-      if (localStream.current) { 
+      cleanupWebRTC();
+      if (localStream.current) {
         localStream.current.getTracks().forEach(track => track.stop());
       }
     };
-  }, []); 
+  }, []);
 
-  // --- WebRTC Functions ---
-
-  // Function to request microphone access
   const requestMicrophoneAccess = async () => {
     try {
-      if (localStream.current) { 
+      if (localStream.current) {
           addMessageToLogs('System', 'Microphone stream already active.');
           return;
       }
@@ -206,7 +199,6 @@ function App() {
     }
   };
 
-  // Function to initiate RTCPeerConnection
   const initiatePeerConnection = async () => {
       if (peerConnection.current) {
           addMessageToLogs('WebRTC', 'Closing existing PeerConnection before initiating new one (from initiatePeerConnection).');
@@ -214,12 +206,11 @@ function App() {
           peerConnection.current = null;
       }
       if (remoteAudioRef.current) {
-        remoteAudioRef.current.srcObject = null; 
+        remoteAudioRef.current.srcObject = null;
       }
 
-      let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }]; // Default Google STUN server
+      let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
 
-      // --- Fetch Xirsys ICE servers from environment variables ---
       if (XIRSYS_SECRET_ID && XIRSYS_SECRET_TOKEN && XIRSYS_BASE_URL) {
           try {
               const XIRSYS_AUTH_TOKEN = btoa(`${XIRSYS_SECRET_ID}:${XIRSYS_SECRET_TOKEN}`);
@@ -228,7 +219,7 @@ function App() {
                   headers: {
                       'Authorization': `Basic ${XIRSYS_AUTH_TOKEN}`,
                       'Content-Type': 'application/json',
-                      'Content-Length': 0 
+                      'Content-Length': 0
                   }
               });
 
@@ -254,7 +245,6 @@ function App() {
           addMessageToLogs('Xirsys Warning', 'Xirsys credentials not provided. Using default STUN server.');
           console.warn('Xirsys credentials (REACT_APP_XIRSYS_SECRET_ID, REACT_APP_XIRSYS_SECRET_TOKEN, REACT_APP_XIRSYS_BASE_URL) are not set. Using default STUN server.');
       }
-      // --- End Fetch Xirsys ICE servers ---
 
       const configuration = { iceServers: iceServers };
 
@@ -263,14 +253,14 @@ function App() {
 
       if (localStream.current) {
           localStream.current.getTracks().forEach(track => {
-              peerConnection.current.addTrack(track, localStream.current); 
+              peerConnection.current.addTrack(track, localStream.current);
           });
           addMessageToLogs('WebRTC', 'Local audio track added to PeerConnection.');
       } else {
           console.warn('Local stream not available when initiating peer connection. Requesting it now.');
           addMessageToLogs('Error', 'Local microphone not available for call. Attempting to re-acquire.');
-          requestMicrophoneAccess(); 
-          return; // Exit if stream not immediately available
+          requestMicrophoneAccess();
+          return;
       }
 
       peerConnection.current.ontrack = (event) => {
@@ -300,7 +290,7 @@ function App() {
               addMessageToLogs('WebRTC Error', 'WebRTC connection failed or disconnected. Prompting change partner.');
           }
       };
-      
+
       peerConnection.current.onnegotiationneeded = async () => {
           console.log("onnegotiationneeded fired. This is fine if we're creating an offer, otherwise it might indicate re-negotiation needs.");
       };
@@ -447,7 +437,6 @@ function App() {
     }
   };
 
-  // --- Debugging for disabled button state ---
   const isJoinButtonDisabled = !isConnected || currentStatus === 'waiting_for_match' || currentStatus === 'in-call' || username.trim() === '' || !localStream.current;
   useEffect(() => {
     console.log('--- Button Disabled State Check ---');
