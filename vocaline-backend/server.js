@@ -1,15 +1,29 @@
 const WebSocket = require('ws');
+const http = require('http'); // Importe le module http
 
 const PORT = process.env.PORT || 8080;
-const wss = new WebSocket.Server({ port: PORT });
+
+// Crée un serveur HTTP qui répondra à la requête de healthcheck
+const server = http.createServer((req, res) => {
+    if (req.url === '/') {
+        // Répond à la racine avec un statut 200 pour le healthcheck
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('Vocaline Backend is running\n');
+    } else {
+        // Pour toute autre requête non gérée
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not Found\n');
+    }
+});
+
+// Crée un serveur WebSocket en utilisant le serveur HTTP
+const wss = new WebSocket.Server({ server: server });
 
 console.log(`WebSocket server started on port ${PORT}`);
 
 // --- Global State Management ---
-// connectedUsers Map stores WebSocket -> { id, username, status, partnerWs, lastPartnerWs }
-// 'partnerWs' is current partner. 'lastPartnerWs' is the *immediate previous* partner to avoid rematching.
 const connectedUsers = new Map();
-const matchmakingQueue = []; // Array of WebSocket clients in the 'waiting' status
+const matchmakingQueue = [];
 
 // --- Helper Function: Generate Unique ID ---
 function generateUniqueId() {
@@ -42,7 +56,7 @@ function updateRealtimeStats() {
             activeConversations++;
         }
     });
-    activeConversations /= 2; // Each conversation involves two participants
+    activeConversations /= 2;
 
     const stats = {
         connectedUsers: connected,
@@ -54,7 +68,7 @@ function updateRealtimeStats() {
 
     if (connectedUsers.size === 0) {
         console.warn("[SERVER_STATS_SEND_CHECK]: No connected clients in 'connectedUsers' Map. Cannot send stats.");
-        return; // Exit if no clients to send to
+        return;
     }
 
     connectedUsers.forEach((userData, userWs) => { 
@@ -82,13 +96,12 @@ function attemptMatch(userWs) {
         return false;
     }
 
-    const lastPartnerWs = requestingUserData.lastPartnerWs; // Get the specific last partner for this requesting user
+    const lastPartnerWs = requestingUserData.lastPartnerWs;
     
-    // Filter out the requesting user, users not waiting, AND the requesting user's LAST partner
     const eligiblePartners = matchmakingQueue.filter(
-        partnerWs => partnerWs !== userWs && // Not self
-                     connectedUsers.get(partnerWs)?.status === 'waiting' && // Is waiting
-                     partnerWs !== lastPartnerWs // IMPORTANT: Exclude the last partner of the *requesting user*
+        partnerWs => partnerWs !== userWs &&
+                     connectedUsers.get(partnerWs)?.status === 'waiting' &&
+                     partnerWs !== lastPartnerWs
     );
 
     if (eligiblePartners.length > 0) {
@@ -97,7 +110,6 @@ function attemptMatch(userWs) {
         const partnerData = connectedUsers.get(partnerWs);
 
         if (requestingUserData.status === 'waiting' && partnerData?.status === 'waiting') {
-            // Remove both users from the matchmaking queue
             let index = matchmakingQueue.indexOf(userWs);
             if (index !== -1) {
                 matchmakingQueue.splice(index, 1);
@@ -111,11 +123,11 @@ function attemptMatch(userWs) {
 
             requestingUserData.status = 'in-call';
             requestingUserData.partner = partnerWs;
-            requestingUserData.lastPartnerWs = null; // Reset last partner once matched to allow new matches
+            requestingUserData.lastPartnerWs = null;
             
             partnerData.status = 'in-call';
             partnerData.partner = userWs;
-            partnerData.lastPartnerWs = null; // Reset last partner for the new partner too
+            partnerData.lastPartnerWs = null;
 
             console.log(`[MATCH_SUCCESS]: Match found: ${requestingUserData.username} (ID: ${requestingUserData.id}) <-> ${partnerData.username} (ID: ${partnerData.id})`);
 
@@ -138,7 +150,6 @@ wss.on('connection', ws => {
     const connectionId = generateUniqueId();
     console.log(`[CLIENT_CONNECT]: Client connected with connection ID: ${connectionId}`);
     
-    // Initialize user data, including lastPartnerWs
     connectedUsers.set(ws, { id: connectionId, username: 'Guest', status: 'connected', partner: null, lastPartnerWs: null });
     
     sendMessage(ws, 'welcome', { message: 'Welcome to Vocaline. Please provide your username to join matchmaking.' });
@@ -177,7 +188,7 @@ wss.on('connection', ws => {
 
                 user.username = parsedMessage.payload.username;
                 user.status = 'waiting';
-                user.lastPartnerWs = null; // Clear last partner when joining fresh, as they are not coming from a call yet
+                user.lastPartnerWs = null;
                 matchmakingQueue.push(ws);
                 console.log(`[USER_JOINED_QUEUE]: ${user.username} (ID: ${user.id}) joined matchmaking. Queue size: ${matchmakingQueue.length}`);
                 sendMessage(ws, 'status_update', { status: 'waiting_for_match' });
@@ -197,7 +208,6 @@ wss.on('connection', ws => {
             case 'change_partner':
                 console.log(`[CHANGE_PARTNER_REQ]: ${user.username} (ID: ${user.id}) wants to change partner.`);
                 
-                // If user was in a call, notify old partner and set their status to waiting
                 if (user.status === 'in-call' && user.partner) {
                     const oldPartnerWs = user.partner;
                     const oldPartnerData = connectedUsers.get(oldPartnerWs);
@@ -206,7 +216,6 @@ wss.on('connection', ws => {
                         sendMessage(oldPartnerWs, 'partner_disconnected', { message: `${user.username} has changed partners.` });
                         oldPartnerData.status = 'waiting';
                         oldPartnerData.partner = null;
-                        // Set the current user as the last partner for the old partner
                         oldPartnerData.lastPartnerWs = ws; 
                         if (!matchmakingQueue.includes(oldPartnerWs)) {
                            matchmakingQueue.push(oldPartnerWs); 
@@ -218,18 +227,13 @@ wss.on('connection', ws => {
                     }
                 }
                 
-                // Handle the user who initiated 'change_partner'
                 user.status = 'waiting';
                 user.partner = null;
-                // Store their old partner so they don't get re-matched with them immediately
-                // This is the critical line for preventing re-matching with the same partner
-                // user.lastPartnerWs is implicitly set here as user.partner holds the old partner WS reference
-                
                 const userIndexInQueue = matchmakingQueue.indexOf(ws);
                 if (userIndexInQueue !== -1) {
                     matchmakingQueue.splice(userIndexInQueue, 1);
                 }
-                matchmakingQueue.unshift(ws); // Add current user to the FRONT of the queue to prioritize them
+                matchmakingQueue.unshift(ws);
                 console.log(`[CHANGE_PARTNER_PRIO]: ${user.username} (ID: ${user.id}) moved to front of queue. New queue size: ${matchmakingQueue.length}`);
 
                 sendMessage(ws, 'status_update', { status: 'waiting_for_match' });
@@ -257,7 +261,7 @@ wss.on('connection', ws => {
                         sendMessage(oldPartnerWs, 'partner_disconnected', { message: `${user.username} has left the conversation.` });
                         oldPartnerData.status = 'waiting';
                         oldPartnerData.partner = null;
-                        oldPartnerData.lastPartnerWs = ws; // Set current user (the one disconnecting) as old partner for the remaining user
+                        oldPartnerData.lastPartnerWs = ws;
                         if (!matchmakingQueue.includes(oldPartnerWs)) {
                            matchmakingQueue.push(oldPartnerWs); 
                            console.log(`[PARTNER_REQUEUE]: ${oldPartnerData.username} re-added to queue after partner disconnect.`);
@@ -276,7 +280,7 @@ wss.on('connection', ws => {
                 }
                 user.status = 'disconnected';
                 user.partner = null;
-                user.lastPartnerWs = null; // Clear last partner on full disconnect
+                user.lastPartnerWs = null;
                 const indexInQueue = matchmakingQueue.indexOf(ws);
                 if (indexInQueue !== -1) {
                     matchmakingQueue.splice(indexInQueue, 1);
@@ -287,7 +291,6 @@ wss.on('connection', ws => {
                 updateRealtimeStats();
                 break;
             
-            // --- WebRTC Signaling Messages ---
             case 'offer':
             case 'answer':
             case 'candidate':
@@ -319,7 +322,6 @@ wss.on('connection', ws => {
         }
     });
 
-    // Event listener for when the client closes the connection (browser tab closed, etc.)
     ws.on('close', () => {
         const user = connectedUsers.get(ws);
         if (user) {
@@ -332,7 +334,7 @@ wss.on('connection', ws => {
                     sendMessage(partnerWs, 'partner_disconnected', { message: `${user.username} has left the conversation.` });
                     partnerData.status = 'waiting';
                     partnerData.partner = null;
-                    partnerData.lastPartnerWs = ws; // Set current user (the one disconnecting) as old partner for the remaining user
+                    partnerData.lastPartnerWs = ws;
                     if (!matchmakingQueue.includes(partnerWs)) {
                         matchmakingQueue.push(partnerWs);
                         console.log(`[PARTNER_REQUEUE_ON_DISCONNECT]: ${partnerData.username} re-added to queue.`);
@@ -364,7 +366,7 @@ wss.on('connection', ws => {
         }
     });
 
-    ws.on('error', error => {
-        console.error(`[WS_ERROR]: WebSocket error for client ID: ${connectedUsers.get(ws)?.id || 'unknown'}. Error: ${error.message}`);
+    server.listen(PORT, () => {
+        console.log(`HTTP server listening on port ${PORT} for healthchecks.`);
     });
 });
