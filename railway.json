@@ -12,6 +12,9 @@
   "environment": {
     "PORT": "8080",
     "NODE_ENV": "production"
+    /* IMPORTANT: Configure your Xirsys and other environment variables directly in the Railway dashboard.
+       Do NOT add them here as comments or hardcoded values.
+    */
   },
   "services": [
     {
