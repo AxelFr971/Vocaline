@@ -58,7 +58,7 @@ function App() {
   useEffect(() => {
     // IMPORTANT: This URL is now read from a secure environment variable on Railway.
     //const backendWsUrl = process.env.REACT_APP_BACKEND_WS_URL || "ws://localhost:8080";
-	const backendWsUrl = "wss://vocaline-production.up.railway.app";
+	const backendWsUrl = "ws://vocaline-production.up.railway.app";
 
     if (!backendWsUrl) {
       console.error('REACT_APP_BACKEND_WS_URL is not set!');
