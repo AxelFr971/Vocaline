@@ -5,7 +5,7 @@
   },
   "deploy": {
     "numReplicas": 1,
-    "startCommand": "npm run start:backend",
+    "startCommand": "cd vocaline-backend && node server.js",
     "healthcheckPath": "/",
     "healthcheckTimeout": 5000
   },
