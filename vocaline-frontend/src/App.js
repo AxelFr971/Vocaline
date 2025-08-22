@@ -60,7 +60,8 @@ function App() {
     //const backendWsUrl = process.env.REACT_APP_BACKEND_WS_URL || "ws://localhost:8080";
 	const PORT = process.env.PORT || 8080;
 	const wss = new WebSocket.Server({ port: PORT });
-	const backendWsUrl = "8080://vocaline-production.up.railway.app";
+	const backendWsUrl = "wss://vocaline-production.up.railway.app/";
+	
 
     if (!backendWsUrl) {
       console.error('REACT_APP_BACKEND_WS_URL is not set!');
