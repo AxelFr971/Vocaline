@@ -57,7 +57,7 @@ function App() {
     // --- Ligne de connexion optimisée pour la flexibilité ---
     // En production, Railway fournit REACT_APP_BACKEND_WS_URL.
     // En développement, on utilise 'ws://localhost:8080' par défaut.
-    const backendWsUrl = process.env.REACT_APP_BACKEND_WS_URL || "ws://localhost:8080";
+    const backendWsUrl = "production-europe-west4-drams3a.railway-registry.com/6fc77441-f204-431b-a301-82bcb62a150a:af004e6b-9f10-4a8e-af96-7932a8ece685" || process.env.REACT_APP_BACKEND_WS_URL || "ws://localhost:8080";
 
     if (!backendWsUrl) {
       console.error('Backend WS URL is not set!');
