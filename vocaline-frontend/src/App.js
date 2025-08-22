@@ -58,6 +58,8 @@ function App() {
   useEffect(() => {
     // IMPORTANT: This URL is now read from a secure environment variable on Railway.
     //const backendWsUrl = process.env.REACT_APP_BACKEND_WS_URL || "ws://localhost:8080";
+	const PORT = process.env.PORT || 8080;
+	const wss = new WebSocket.Server({ port: PORT });
 	const backendWsUrl = "ws://vocaline-production.up.railway.app";
 
     if (!backendWsUrl) {
