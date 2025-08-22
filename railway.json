@@ -26,19 +26,6 @@
         "healthcheckPath": "/",
         "healthcheckTimeout": 5000
       }
-    },
-    {
-      "name": "vocaline-frontend",
-      "path": "vocaline-frontend",
-      "build": {
-        "builder": "NIXPACKS",
-        "buildCommand": "npm install --omit=dev && npm run build"
-      },
-      "deploy": {
-        "startCommand": "serve -s build",
-        "healthcheckPath": "/"
-      },
-      "dependsOn": ["vocaline-backend"]
     }
   ]
 }
