@@ -23,7 +23,7 @@
       },
       "deploy": {
         "startCommand": "node server.js",
-        "healthcheckPath": "/",
+        "healthcheckPath": "/",h
         "healthcheckTimeout": 5000
       }
     }
